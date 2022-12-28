@@ -1,5 +1,5 @@
 [package]
-name = "rustybarcoder"
+name = "rebar"
 version = "0.1.0"
 edition = "2021"
 
