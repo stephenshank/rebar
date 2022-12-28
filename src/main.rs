@@ -1,6 +1,7 @@
 use bio::alignment::pairwise::*;
 use bio::alignment::AlignmentOperation::*;
 use bio::io::fastq;
+use rayon::prelude::*;
 
 use clap::{arg, Command};
 
@@ -27,39 +28,36 @@ fn main() {
     let reader = fastq::Reader::new(fastq_file.unwrap());
     let barcode1 = b"AGTACGTACGAGTC";
     let barcode2 = b"GTACTCGCAGTAGTC";
-    let scoring = Scoring {
-        gap_open: -5,
-        gap_extend: -1,
-        match_fn: |a: u8, b: u8| if a == b { 1i32 } else { -3i32 },
-        match_scores: Some((1, -3)),
-        xclip_prefix: -10,
-        xclip_suffix: MIN_SCORE,
-        yclip_prefix: 0,
-        yclip_suffix: 0,
-    };
-
-    let mut aligner = Aligner::with_capacity_and_scoring(1000, barcode2.len(), scoring);
 
     println!("Reading...");
     let mut read_vector: Vec<bio::io::fastq::Record> = Vec::new();
-    let chunk_size = 5;
-    for result in reader.records() {
+    let chunk_size = 10000;
+    for (read_index, result) in reader.records().enumerate() {
         let record = result.unwrap();
         read_vector.push(record);
-        let alignment1 = aligner.local(read_vector.last().unwrap().seq(), barcode1);
-        println!("Aligning barcode 1...");
-        println!(
-            "{}",
-            alignment1.pretty(read_vector.last().unwrap().seq(), barcode1)
-        );
-        println!("{},{}", alignment1.xstart, alignment1.xend);
+        if read_index == chunk_size - 1 {
+            let result_vector: Vec<(usize, usize)> = read_vector
+                .par_iter()
+                .map(|result| {
+                    let scoring = Scoring {
+                        gap_open: -5,
+                        gap_extend: -1,
+                        match_fn: |a: u8, b: u8| if a == b { 1i32 } else { -3i32 },
+                        match_scores: Some((1, -3)),
+                        xclip_prefix: -10,
+                        xclip_suffix: MIN_SCORE,
+                        yclip_prefix: 0,
+                        yclip_suffix: 0,
+                    };
 
-        let alignment2 = aligner.local(read_vector.last().unwrap().seq(), barcode2);
-        println!("Aligning barcode 2...");
-        println!(
-            "{}",
-            alignment2.pretty(read_vector.last().unwrap().seq(), barcode2)
-        );
-        println!("{},{}", alignment2.xstart, alignment2.xend);
+                    let mut aligner =
+                        Aligner::with_capacity_and_scoring(1000, barcode2.len(), scoring);
+                    let alignment1 = aligner.local(result.seq(), barcode1);
+                    let alignment2 = aligner.local(result.seq(), barcode2);
+                    (alignment1.xstart, alignment2.xstart)
+                })
+                .collect();
+            println!("{:?}", result_vector[0]);
+        }
     }
 }
