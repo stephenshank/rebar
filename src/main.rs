@@ -1,7 +1,8 @@
 use bio::alignment::pairwise::*;
-use bio::alignment::AlignmentOperation::*;
 use bio::io::fastq;
 use rayon::prelude::*;
+use std::fs::File;
+use std::fs::OpenOptions;
 
 use clap::{arg, Command};
 
@@ -19,23 +20,30 @@ fn main() {
         .get_matches();
 
     let fastq_file_path = matches.get_one::<String>("fastq").expect("required");
+    let tsv_file_path = matches.get_one::<String>("tsv").expect("required");
     println!("Input FASTQ: {:?}", fastq_file_path);
-    println!(
-        "Output TSV: {:?}",
-        matches.get_one::<String>("tsv").expect("required")
-    );
+    println!("Output TSV: {:?}", tsv_file_path);
     let fastq_file = std::fs::File::open(fastq_file_path);
     let reader = fastq::Reader::new(fastq_file.unwrap());
     let barcode1 = b"AGTACGTACGAGTC";
     let barcode2 = b"GTACTCGCAGTAGTC";
 
     println!("Reading...");
+
+    let tsv_file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(tsv_file_path)
+        .unwrap();
     let mut read_vector: Vec<bio::io::fastq::Record> = Vec::new();
+    let mut wtr = csv::Writer::from_writer(tsv_file);
+    wtr.write_record(&["b1start", "b2start"]);
     let chunk_size = 10000;
     for (read_index, result) in reader.records().enumerate() {
         let record = result.unwrap();
         read_vector.push(record);
-        if read_index == chunk_size - 1 {
+        if read_index.rem_euclid(chunk_size) == 0 {
             let result_vector: Vec<(usize, usize)> = read_vector
                 .par_iter()
                 .map(|result| {
@@ -57,7 +65,11 @@ fn main() {
                     (alignment1.xstart, alignment2.xstart)
                 })
                 .collect();
-            println!("{:?}", result_vector[0]);
+            for result in result_vector {
+                let (b1_start, b2_start) = result;
+                wtr.write_record([b1_start.to_string(), b2_start.to_string()]);
+            }
+            read_vector.clear();
         }
     }
 }

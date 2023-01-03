@@ -740,6 +740,7 @@ version = "0.1.0"
 dependencies = [
  "bio",
  "clap",
+ "csv",
  "rayon",
 ]
 
