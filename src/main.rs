@@ -61,6 +61,11 @@ fn main() {
                     let alignment2 = aligner.local(result.seq(), barcode2);
                     let b1_start = alignment1.xstart;
                     let b2_start = alignment2.xstart;
+                    println!("{}", b1_start);
+                    println!("{}", b2_start);
+                    if b1_start < 9 || b2_start < 9 {
+                        return (0, 0, "-", 0, 0, "-");
+                    }
                     (
                         b1_start,
                         alignment1.xend,
